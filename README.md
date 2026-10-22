@@ -34,6 +34,8 @@ To carry local saved foods into the hosted database, import `data/foods.sqlite3`
 
 ## Behavior
 
+- Inputs start empty except serving size, which defaults to 100 g. Reset restores these defaults, clears the food name, and exits edit mode without changing saved foods.
+
 - Density = serving protein ÷ serving calories × 100.
 - Container protein = serving protein × container size ÷ serving size.
 - Cost = container price × 100 ÷ container protein (euro cents per gram).

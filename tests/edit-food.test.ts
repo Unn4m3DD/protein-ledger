@@ -1,0 +1,31 @@
+import { test, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { POST, GET } from '../app/api/u/[uuid]/foods/route';
+import { PATCH } from '../app/api/u/[uuid]/foods/[id]/route';
+import { database } from '../lib/db';
+const folder=mkdtempSync(path.join(tmpdir(),'ledger-edit-'));
+process.env.TURSO_DATABASE_URL=`file:${path.join(folder,'test.db')}`;
+const owner=randomUUID(),other=randomUUID();
+const ctx=(uuid:string,id:string)=>({params:Promise.resolve({uuid,id})});
+function request(data:unknown){return new Request('http://localhost/api',{method:'PATCH',body:JSON.stringify(data)});}
+after(async()=>{(await database()).close();await rm(folder,{recursive:true,force:true});});
+test('edits preserve ID and owner; partial edits clear missing values; invalid edits leave data intact',async()=>{
+ const created=await POST(request({name:'Original',protein:10,calories:100,price:2}),{params:Promise.resolve({uuid:owner})});
+ assert.equal(created.status,201);
+ const {id}=await created.json();
+ const edited={name:'Updated',protein:20,calories:100,owner:other};
+ assert.equal((await PATCH(request(edited),ctx(other,String(id)))).status,404);
+ assert.equal((await PATCH(request(edited),ctx(owner,String(id)))).status,200);
+ const rows=await (await GET(new Request('http://localhost'),{params:Promise.resolve({uuid:owner})})).json();
+ assert.equal(rows.length,1);assert.equal(rows[0].id,id);assert.equal(rows[0].name,'Updated');assert.equal(rows[0].protein,20);assert.equal(rows[0].price,null);
+ assert.equal((await PATCH(request({name:'Invalid',protein:-1}),ctx(owner,String(id)))).status,400);
+ const stored=await (await database()).execute({sql:'SELECT owner,protein,name FROM foods WHERE id=?',args:[id]});
+ assert.equal(stored.rows[0].owner,owner);assert.equal(stored.rows[0].protein,20);assert.equal(stored.rows[0].name,'Updated');
+ assert.equal((await PATCH(request(edited),ctx('invalid',String(id)))).status,400);
+ assert.equal((await PATCH(request(edited),ctx(owner,'999999'))).status,404);
+});

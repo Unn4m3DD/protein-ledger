@@ -1,0 +1,10 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { metrics, calorieError, parseFood } from '../lib/food';
+const blank={calories:null,protein:null,carbs:null,fat:null,serving:null,container:null,price:null};
+test('density uses only protein and calories',()=>{assert.equal(metrics({...blank,protein:20,calories:100}).density,20);assert.equal(metrics({...blank,protein:20,calories:100}).cost,null);});
+test('cost works without calories, carbs or fat',()=>{const result=metrics({...blank,protein:20,serving:100,container:500,price:2});assert.equal(result.cost,2);assert.equal(result.density,null);assert.equal(result.totalProtein,100);});
+test('zero protein and missing price do not become free protein',()=>{assert.equal(metrics({...blank,protein:0,serving:100,container:500,price:2}).cost,null);assert.equal(metrics({...blank,protein:20,serving:100,container:500}).cost,null);assert.equal(metrics({...blank,protein:20,serving:100,container:500,price:0}).cost,0);});
+test('macro calorie validation handles partial, equal and excessive calories',()=>{assert.equal(calorieError({...blank,protein:20,carbs:5,calories:100}),null);assert.match(calorieError({...blank,protein:20,carbs:5,fat:1,calories:100})! ,/109 kcal/);assert.match(calorieError({...blank,protein:30,calories:100})!,/120 kcal/);assert.equal(calorieError({...blank,protein:30}),null);});
+test('partial saves preserve missing fields and ignore supplied owner',()=>{const food=parseFood({name:' Skyr ',protein:20,calories:100,owner:'someone-else'});assert.equal(food.name,'Skyr');assert.equal(food.price,null);assert.equal(food.carbs,null);assert.equal('owner' in food,false);});
+test('invalid numeric values are rejected',()=>{for(const value of [-1,Infinity,NaN,true,'20'])assert.throws(()=>parseFood({name:'Bad',protein:value}));assert.throws(()=>parseFood({name:'Bad',serving:0}));});
